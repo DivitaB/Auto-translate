@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Formatted PDF Extract + Translate</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .viewer {
+            width: 95%;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            white-space: pre-wrap;
+            line-height: 1.6em;
+            margin-top: 20px;
+        }
+        .title { font-size: 20px; font-weight: bold; margin-top: 20px; }
+        textarea {
+            width: 95%;
+            height: 150px;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #aaa;
+            resize: vertical;
+            font-size: 15px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>PDF → Keep Original Layout → Translate</h2>
+
+<input type="file" id="pdfUpload" accept="application/pdf">
+
+<h3>OR enter text manually</h3>
+<textarea id="manualInput" placeholder="Type or paste your text here..."></textarea>
+
+<h3>Choose Language</h3>
+<select id="targetLang">
+    <option value="hi">Hindi</option>
+    <option value="ta">Tamil</option>
+    <option value="te">Telugu</option>
+    <option value="bn">Bengali</option>
+    <option value="mr">Marathi</option>
+    <option value="gu">Gujarati</option>
+    <option value="kn">Kannada</option>
+    <option value="ml">Malayalam</option>
+    <option value="pa">Punjabi</option>
+    <option value="ur">Urdu</option>
+</select>
+
+<div class="title">Original PDF Layout</div>
+<div id="viewer" class="viewer"></div>
+
+<button onclick="translatePDF()" style="margin-top:20px; padding:10px 15px;">Translate</button>
+
+<div class="title">Translated Text</div>
+<div id="translatedViewer" class="viewer"></div>
+
+
+<script>
+document.getElementById("pdfUpload").addEventListener("change", async function (event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = async function () {
+        const typedArray = new Uint8Array(this.result);
+        const pdf = await pdfjsLib.getDocument(typedArray).promise;
+
+        let finalOutput = "";
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const content = await page.getTextContent();
+
+            let lines = {};
+
+            content.items.forEach((item) => {
+                const y = Math.round(item.transform[5]);
+                if (!lines[y]) lines[y] = [];
+                lines[y].push(item.str);
+            });
+
+            const sortedY = Object.keys(lines).sort((a, b) => b - a);
+
+            finalOutput += `\n\n=== Page ${pageNum} ===\n\n`;
+
+            sortedY.forEach((y) => {
+                finalOutput += lines[y].join(" ") + "\n";
+            });
+        }
+
+        document.getElementById("viewer").innerText = finalOutput;
+    };
+
+    reader.readAsArrayBuffer(file);
+});
+
+
+
+async function translatePDF() {
+    const pdfText = document.getElementById("viewer").innerText.trim();
+    const manualText = document.getElementById("manualInput").value.trim();
+    const target = document.getElementById("targetLang").value;
+
+    // Choose priority → manual text > PDF text
+    let textToTranslate = manualText || pdfText;
+
+    if (!textToTranslate) {
+        alert("Please upload a PDF or enter text manually.");
+        return;
+    }
+
+    const apiKey = "AIzaSyApebFmaV2x08dJqI6e_pfSyQtHiif3fwc";
+
+    const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            q: textToTranslate,
+            target: target,
+            format: "text"
+        })
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+        document.getElementById("translatedViewer").innerText =
+            "Error: " + data.error.message;
+        return;
+    }
+
+    const translated = data.data.translations[0].translatedText;
+    document.getElementById("translatedViewer").innerText = translated;
+}
+</script>
+
+</body>
+</html>
